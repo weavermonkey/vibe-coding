@@ -1,0 +1,8 @@
+# macOS
+.DS_Store
+
+# Environment variables
+.env
+
+# IDE Specific
+window.code-workspace
