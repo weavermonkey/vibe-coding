@@ -15,26 +15,15 @@
 
 # Python bytecode / caches
 __pycache__/
-*.py[cod]
-*.pyo
-*.pyd
 
 # Virtual environments
 .venv/
 env/
 venv/
 
+# Test configuration
+pytest.ini
+
 # Testing / coverage
 .coverage
-htmlcov/
-.tox/
 .pytest_cache/
-
-# Logs
-*.log
-
-# MyPy / type checking
-.mypy_cache/
-
-# Project output
-output/

@@ -26,6 +26,7 @@ class GraphState(TypedDict, total=False):
 
     # Clarity and company information
     company_name: Optional[str]
+    last_discussed_company: Optional[str]
     clarity_status: Optional[Literal["clear", "needs_clarification"]]
 
     # Research results

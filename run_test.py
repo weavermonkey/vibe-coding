@@ -1,5 +1,6 @@
 import logging
 import sys
+import pytest
 
 from dotenv import load_dotenv
 
@@ -14,9 +15,6 @@ def _configure_logging() -> None:
 def main() -> int:
     _configure_logging()
     load_dotenv()
-
-    import pytest
-
     logging.getLogger(__name__).info("Starting pytest run for all tests.")
     return pytest.main(["-x", "tests"])
 

@@ -5,10 +5,10 @@ from langgraph.graph import START, END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 
-from agents.clarity import run_clarity_agent
-from agents.research import run_research_agent
-from agents.synthesis import run_synthesis_agent
-from agents.validator import run_validator_agent
+from agents.clarity import ClarityAgent
+from agents.research import ResearchAgent
+from agents.synthesis import SynthesisAgent
+from agents.validator import ValidatorAgent
 from graph.routing import (
     route_after_clarity,
     route_after_research,
@@ -72,11 +72,16 @@ def build_graph() -> CompiledStateGraph:
 
     builder: StateGraph[GraphState] = StateGraph(GraphState)
 
-    builder.add_node("clarity", run_clarity_agent)
+    clarity_agent = ClarityAgent()
+    research_agent = ResearchAgent()
+    validator_agent = ValidatorAgent()
+    synthesis_agent = SynthesisAgent()
+
+    builder.add_node("clarity", clarity_agent.run)
     builder.add_node("clarity_interrupt", clarity_interrupt_node)
-    builder.add_node("research", run_research_agent)
-    builder.add_node("validator", run_validator_agent)
-    builder.add_node("synthesis", run_synthesis_agent)
+    builder.add_node("research", research_agent.run)
+    builder.add_node("validator", validator_agent.run)
+    builder.add_node("synthesis", synthesis_agent.run)
 
     builder.add_edge(START, "clarity")
 
