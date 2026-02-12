@@ -1,7 +1,7 @@
 import logging
 from typing import Literal, Optional
 
-from langchain_core.messages import AIMessage, BaseMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
 
@@ -12,11 +12,19 @@ from graph.state import GraphState
 logger = logging.getLogger(__name__)
 
 
-_validator_model = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    api_key=get_gemini_api_key(),
-    temperature=0.1,
-)
+_validator_model = None
+_validator_structured = None
+
+
+def _get_validator_model() -> ChatGoogleGenerativeAI:
+    global _validator_model
+    if _validator_model is None:
+        _validator_model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            api_key=get_gemini_api_key(),
+            temperature=0.1,
+        )
+    return _validator_model
 
 
 class ValidationAssessment(BaseModel):
@@ -27,7 +35,13 @@ class ValidationAssessment(BaseModel):
     )
 
 
-_validator_structured = _validator_model.with_structured_output(ValidationAssessment)
+def _get_validator_structured():
+    global _validator_structured
+    if _validator_structured is None:
+        _validator_structured = _get_validator_model().with_structured_output(
+            ValidationAssessment
+        )
+    return _validator_structured
 
 
 def _build_validator_messages(
@@ -47,7 +61,7 @@ def _build_validator_messages(
         )
     )
     context = f"User query: {query}\n\nResearch findings:\n{research_findings or '<<missing>>'}"
-    analysis_request = AIMessage(
+    analysis_request = HumanMessage(
         content=context,
     )
     return [system_message] + messages + [analysis_request]
@@ -69,7 +83,7 @@ def run_validator_agent(state: GraphState) -> GraphState:
     prompt_messages = _build_validator_messages(messages, query, research_findings)
     logger.debug("Validator prompt messages: %s", prompt_messages)
 
-    assessment = _validator_structured.invoke(prompt_messages)
+    assessment = _get_validator_structured().invoke(prompt_messages)
     logger.info(
         "Validator assessment: result=%s, critique=%s",
         assessment.validation_result,

@@ -11,11 +11,18 @@ from graph.state import GraphState
 logger = logging.getLogger(__name__)
 
 
-_synthesis_model = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    api_key=get_gemini_api_key(),
-    temperature=0.3,
-)
+_synthesis_model = None
+
+
+def _get_synthesis_model() -> ChatGoogleGenerativeAI:
+    global _synthesis_model
+    if _synthesis_model is None:
+        _synthesis_model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            api_key=get_gemini_api_key(),
+            temperature=0.3,
+        )
+    return _synthesis_model
 
 
 def _build_synthesis_messages(state: GraphState) -> List[BaseMessage]:
@@ -55,7 +62,7 @@ def run_synthesis_agent(state: GraphState) -> GraphState:
     prompt_messages = _build_synthesis_messages(state)
     logger.debug("Synthesis prompt messages: %s", prompt_messages)
 
-    response = _synthesis_model.invoke(prompt_messages)
+    response = _get_synthesis_model().invoke(prompt_messages)
     if not isinstance(response, AIMessage):
         logger.error("Unexpected response type from synthesis model: %s", type(response))
         raise RuntimeError("Unexpected response type from synthesis model.")

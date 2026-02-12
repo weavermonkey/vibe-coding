@@ -18,27 +18,56 @@ class ClarityResult(BaseModel):
     clarification_question: Optional[str] = None
 
 
-_clarity_model = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    api_key=get_gemini_api_key(),
-    temperature=0.0,
-)
-_clarity_model_structured = _clarity_model.with_structured_output(ClarityResult)
+_clarity_model = None
+_clarity_model_structured = None
+
+
+def _get_clarity_model() -> ChatGoogleGenerativeAI:
+    global _clarity_model
+    if _clarity_model is None:
+        _clarity_model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            api_key=get_gemini_api_key(),
+            temperature=0.0,
+        )
+    return _clarity_model
+
+
+def _get_clarity_model_structured():
+    global _clarity_model_structured
+    if _clarity_model_structured is None:
+        _clarity_model_structured = _get_clarity_model().with_structured_output(
+            ClarityResult
+        )
+    return _clarity_model_structured
 
 
 def _build_clarity_messages(messages: list[BaseMessage], query: str) -> list[BaseMessage]:
     system_message = SystemMessage(
         content=(
             "You are a clarity assessment agent.\n"
-            "Given the conversation so far and the latest user query, decide whether "
+            "Given the full conversation history so far and the latest user query, decide whether "
             "the query is clear and specific enough to begin company-focused research.\n"
             "You MUST respond using the structured schema provided to you.\n"
-            "- If the query clearly refers to a specific company (e.g., Apple, Tesla, Microsoft), "
-            'set clarity_status to \"clear\" and extract company_name.\n'
-            "- If the query is vague (e.g., 'Tell me about the company') or does not clearly "
-            "identify a single company, set clarity_status to \"needs_clarification\" and "
-            "provide a short follow-up question asking the user to clarify what company "
-            "or topic they mean.\n"
+            "\n"
+            "Clarity rules:\n"
+            "- Always use the entire conversation history (not just the latest query) to resolve what company "
+            "the user is talking about.\n"
+            "- If a specific company name is explicitly mentioned (e.g., Apple, Tesla, Microsoft), set "
+            'clarity_status to \"clear\" and extract company_name.\n'
+            "- If previous turns clearly established one or more specific companies, treat follow-up references "
+            "that use pronouns or generic phrases (e.g., \"they\", \"their\", \"the company\", \"that company\", "
+            "\"the other one\") as referring to those companies, even if the latest query does not repeat the "
+            "company name.\n"
+            "- When multiple companies have been discussed, default generic references like \"they\" or "
+            "\"their\" to the most recently discussed company that makes sense in context.\n"
+            "- Phrases like \"the other one\" should refer to the other clearly discussed company (for example, "
+            "if the conversation first talked about Infosys and then TCS, \"the other one\" refers back to "
+            "Infosys).\n"
+            "- Only set clarity_status to \"needs_clarification\" if, after carefully checking the entire "
+            "conversation history, you still cannot confidently resolve the company being referred to, or if "
+            "no specific company has been mentioned at all (e.g., the very first query is just "
+            "\"Tell me about the company\"). In that case, provide a short follow-up clarification question.\n"
         )
     )
     latest_query_message = HumanMessage(
@@ -61,7 +90,7 @@ def run_clarity_agent(state: GraphState) -> GraphState:
     prompt_messages = _build_clarity_messages(messages, query)
     logger.debug("Clarity agent prompt messages: %s", prompt_messages)
 
-    result: ClarityResult = _clarity_model_structured.invoke(prompt_messages)
+    result: ClarityResult = _get_clarity_model_structured().invoke(prompt_messages)
     logger.info(
         "Clarity agent result: clarity_status=%s, company_name=%s",
         result.clarity_status,

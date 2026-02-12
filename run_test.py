@@ -3,8 +3,6 @@ import sys
 
 from dotenv import load_dotenv
 
-from config import get_gemini_api_key
-
 
 def _configure_logging() -> None:
     logging.basicConfig(
@@ -16,7 +14,6 @@ def _configure_logging() -> None:
 def main() -> int:
     _configure_logging()
     load_dotenv()
-    get_gemini_api_key()
 
     import pytest
 

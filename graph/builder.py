@@ -1,8 +1,8 @@
 import logging
-from typing import Any, Dict
 
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import START, END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.types import Command, interrupt
 
 from agents.clarity import run_clarity_agent
@@ -53,7 +53,7 @@ def clarity_interrupt_node(state: GraphState) -> Command:
     return Command(update=updated_state, goto="clarity")
 
 
-def build_graph() -> Any:
+def build_graph() -> CompiledStateGraph:
     """
     Construct and compile the LangGraph StateGraph for the multi-agent system.
 

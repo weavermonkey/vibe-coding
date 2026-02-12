@@ -1,8 +1,6 @@
 import logging
 from typing import Optional
 
-from google import genai
-from google.genai import types
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from pydantic import BaseModel, Field
@@ -14,8 +12,20 @@ from graph.state import GraphState
 logger = logging.getLogger(__name__)
 
 
-_genai_client = genai.Client(api_key=get_gemini_api_key())
-_google_search_tool = types.Tool(google_search=types.GoogleSearch())
+_research_model = None
+_confidence_model = None
+_confidence_assessor = None
+
+
+def _get_research_model() -> ChatGoogleGenerativeAI:
+    global _research_model
+    if _research_model is None:
+        _research_model = ChatGoogleGenerativeAI(
+            model="gemini-2.5-flash",
+            api_key=get_gemini_api_key(),
+            temperature=0.0,
+        )
+    return _research_model
 
 
 class ConfidenceAssessment(BaseModel):
@@ -29,12 +39,24 @@ class ConfidenceAssessment(BaseModel):
     )
 
 
-_confidence_model = ChatGoogleGenerativeAI(
-    model="gemini-2.0-flash",
-    api_key=get_gemini_api_key(),
-    temperature=0.0,
-)
-_confidence_assessor = _confidence_model.with_structured_output(ConfidenceAssessment)
+def _get_confidence_model() -> ChatGoogleGenerativeAI:
+    global _confidence_model
+    if _confidence_model is None:
+        _confidence_model = ChatGoogleGenerativeAI(
+            model="gemini-2.0-flash",
+            api_key=get_gemini_api_key(),
+            temperature=0.0,
+        )
+    return _confidence_model
+
+
+def _get_confidence_assessor():
+    global _confidence_assessor
+    if _confidence_assessor is None:
+        _confidence_assessor = _get_confidence_model().with_structured_output(
+            ConfidenceAssessment
+        )
+    return _confidence_assessor
 
 
 def _build_research_prompt(query: str, company_name: Optional[str]) -> str:
@@ -74,16 +96,33 @@ def run_research_agent(state: GraphState) -> GraphState:
     prompt = _build_research_prompt(query, company_name)
     logger.debug("Research prompt: %s", prompt)
 
-    config = types.GenerateContentConfig(
-        tools=[_google_search_tool],
-    )
-    response = _genai_client.models.generate_content(
-        model="gemini-2.5-flash",
-        contents=prompt,
-        config=config,
+    # Use Gemini via LangChain with built-in Google Search grounding.
+    response = _get_research_model().invoke(
+        prompt,
+        tools=[{"google_search": {}}],
     )
 
-    text = (response.text or "").strip()
+    if isinstance(response, AIMessage):
+        content = response.content
+        if isinstance(content, str):
+            text = content.strip()
+        else:
+            text_blocks = []
+            if isinstance(content, list):
+                for block in content:
+                    if isinstance(block, dict):
+                        value = block.get("text")
+                        if isinstance(value, str):
+                            text_blocks.append(value)
+            text = "\n".join(text_blocks).strip() if text_blocks else ""
+            if not text:
+                text_attr = getattr(response, "text", "")
+                if isinstance(text_attr, str):
+                    text = text_attr.strip()
+    else:
+        logger.error("Unexpected response type from research model: %s", type(response))
+        raise RuntimeError("Unexpected response type from research model.")
+
     if not text:
         logger.error("Empty research findings returned from Gemini.")
         raise RuntimeError("Gemini returned empty research findings.")
@@ -102,7 +141,7 @@ def run_research_agent(state: GraphState) -> GraphState:
         ),
         HumanMessage(content=f"User query: {query}\n\nResearch findings:\n{text}"),
     ]
-    assessment = _confidence_assessor.invoke(assessment_prompt)
+    assessment = _get_confidence_assessor().invoke(assessment_prompt)
     logger.info(
         "Research confidence assessment: score=%s, reasoning=%s",
         assessment.confidence_score,
